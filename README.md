@@ -31,7 +31,59 @@ SapAttachmentDownloader.ConsoleJob/   Für Aufgabenplanung/Dienst: läuft ohne U
 2. Projekt öffnen/starten (`dotnet run --project SapAttachmentDownloader.WinForms`)
 3. Kennwort in der GUI eintragen (wird **nicht** gespeichert)
 4. **"1) Rechnungen laden"** – zieht und dedupliziert die Belegliste
-5. **"2) Anhänge prüfen & herunterladen"** – prüft pro Beleg, ob ein Anhang existiert, lädt ihn in einen Unterordner je Beleg
+5. **"2) Anhänge prüfen & herunterladen"** – prüft pro Beleg, ob ein Anhang existiert, lädt ihn passend zur
+   konfigurierten Datei-/Ordnerbenennung herunter (siehe nächster Abschnitt)
+
+## Datei- und Ordnerbenennung konfigurieren
+
+Standardmäßig werden Anhänge unter ihrem Original-Dateinamen aus SAP in einem Unterordner
+`Rechnungsnummer_Lieferant-Nr.` je Beleg gespeichert. Beides lässt sich in der WinForms-GUI umstellen
+(Bereiche **"Dateibenennung"** und **"Zielordner"**) und wird über **"Einstellungen speichern"** in die
+`appsettings.json` geschrieben – dadurch übernimmt auch der `ConsoleJob` exakt dieselbe Konfiguration.
+
+**Dateibenennung:**
+- *Original-Dateiname aus SAP* (Default) – unverändertes Verhalten.
+- *Benutzerdefiniert* – Dateiname wird aus einer geordneten Auswahl von Rechnungs-/Anhang-Feldern
+  (Rechnungsnummer, Lieferant, Lieferantenname, Buchungsdatum, Original-Dateiname, …) und frei
+  eingegebenem Text zusammengesetzt, verbunden durch ein beliebig langes Trennzeichen (z. B. `" - "`).
+  Beispiel: `Eingangsrechnung - 5105600186 - 1000000123 - 20260315.pdf`. Die Dateiendung wird immer
+  automatisch angehängt.
+
+**Zielordner:**
+- *Alle Dateien in einem gemeinsamen Ordner* – kein Unterordner, alle Anhänge landen direkt im
+  Zielordner (`OutputFolder`).
+- *Rechnungs-Unterordner* (Default) – Unterordner ebenso frei aus Feldern/Text zusammensetzbar, z. B.
+  gruppiert nach Lieferant statt nach Rechnungsnummer (mehrere Rechnungen desselben Lieferanten landen
+  dann automatisch im selben Ordner).
+
+Beide Einstellungen liegen als eigene Abschnitte in der `appsettings.json`:
+
+```json
+"FileNaming": {
+  "Mode": "Custom",
+  "Segments": [
+    { "Type": "Text", "Value": "Eingangsrechnung" },
+    { "Type": "Field", "Value": "SupplierInvoice" },
+    { "Type": "Field", "Value": "Supplier" }
+  ],
+  "Separator": " - ",
+  "DateFormat": "yyyyMMdd"
+},
+"FolderNaming": {
+  "Mode": "Custom",
+  "Segments": [ { "Type": "Field", "Value": "SupplierName" } ],
+  "Separator": "_",
+  "DateFormat": "yyyyMMdd"
+}
+```
+
+> Fehlt einer der beiden Abschnitte (z. B. in einer älteren `appsettings.json`), greift automatisch das
+> bisherige Verhalten (Original-Dateiname bzw. `Rechnungsnummer_Lieferant-Nr.`-Unterordner) – kein
+> manuelles Nachziehen nötig.
+
+> **Hinweis für den Konsolen-Job:** Da WinForms und ConsoleJob jeweils eine eigene `appsettings.json`
+> besitzen, muss eine in der GUI gespeicherte Konfiguration einmalig auch in die
+> `SapAttachmentDownloader.ConsoleJob/appsettings.json` übertragen werden.
 
 ## Belegarten-Filter
 
