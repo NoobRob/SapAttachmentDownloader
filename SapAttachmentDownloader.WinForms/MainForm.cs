@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SapAttachmentDownloader.Core;
 using SapAttachmentDownloader.Core.Models;
 
@@ -39,6 +40,50 @@ public class MainForm : Form
         Font = new Font("Consolas", 10),
     };
 
+    // --- Datei- und Ordnerbenennung ---
+    private readonly NamingComposer _fileNaming = new(
+        "Dateibenennung",
+        "Original-Dateiname aus SAP",
+        "Benutzerdefiniert",
+        FileNameBuilder.Catalog.Select(f => (f.Key, f.DisplayName)).ToList(),
+        " - ", "yyyyMMdd",
+        "Tipp: Über \"Text hinzufügen\" können Sie an beliebiger Stelle einen freien Text einfügen " +
+        "(z. B. \"Eingangsrechnung\") und mit ▲/▼ einsortieren. Ein Anhang-Feld wie \"Original-Dateiname\" " +
+        "einbeziehen, um mehrere Anhänge pro Rechnung unterscheidbar zu machen.");
+
+    private readonly NamingComposer _folderNaming = new(
+        "Zielordner",
+        "Alle Dateien in einem gemeinsamen Ordner",
+        "Rechnungs-Unterordner",
+        FolderNameBuilder.Catalog.Select(f => (f.Key, f.DisplayName)).ToList(),
+        "_", "yyyyMMdd",
+        "Tipp: Bei \"Alle Dateien in einem gemeinsamen Ordner\" entfaellt der Unterordner - " +
+        "alle heruntergeladenen Dateien landen direkt im Zielordner.");
+
+    private readonly Button _btnSaveNaming = new() { Text = "Einstellungen speichern", Width = 180 };
+
+    private static readonly InvoiceDocument SampleInvoice = new()
+    {
+        SupplierInvoice = "5105600186",
+        SupplierReference = "RE-2026-001",
+        Supplier = "1000000123",
+        SupplierName = "Musterlieferant GmbH",
+        CompanyCode = "1010",
+        FiscalYear = "2026",
+        AccountingDocumentType = "RE",
+        PostingDate = new DateTime(2026, 3, 15),
+        DocumentDate = new DateTime(2026, 3, 10),
+        InvoiceGrossAmount = 1234.56m,
+        DocumentCurrency = "EUR",
+    };
+
+    private static readonly AttachmentOriginal SampleAttachment = new()
+    {
+        FileName = "Rechnung.pdf",
+        ArchiveDocumentID = "0090000123",
+        LinkedSAPObjectKey = "51056001862026",
+    };
+
     private BindingList<InvoiceDocument> _invoices = new();
     private SapApiOptions? _options;
 
@@ -46,11 +91,24 @@ public class MainForm : Form
     {
         Text = "FUCHS – SAP Eingangsrechnungen: Anhang-Download";
         Width = 1800;
-        Height = 750;
+        Height = 900;
         StartPosition = FormStartPosition.CenterScreen;
+
+        // Default fuer die Ordnerbenennung reproduziert das bisherige, fest verdrahtete
+        // Verhalten (Unterordner "Rechnungsnummer_Lieferant-Nr."), damit ohne appsettings.json
+        // oder ohne "FolderNaming"-Sektion nichts anders funktioniert als zuvor.
+        var folderDefaults = new FolderNamingOptions();
+        _folderNaming.Apply(folderDefaults.Mode == FolderNamingMode.Custom, folderDefaults.Segments, folderDefaults.Separator, folderDefaults.DateFormat);
+
+        _fileNaming.Changed += UpdateFilePreview;
+        _folderNaming.Changed += UpdateFolderPreview;
+        _txtOutputFolder.TextChanged += (_, _) => UpdateFolderPreview();
+        _btnSaveNaming.Click += (_, _) => SaveNamingSettingsToAppSettings();
 
         BuildLayout();
         LoadSettingsFromAppSettings();
+        UpdateFilePreview();
+        UpdateFolderPreview();
 
         _btnBrowseFolder.Click += (_, _) => BrowseFolder();
         _btnLoadInvoices.Click += async (_, _) => await LoadInvoicesAsync();
@@ -66,16 +124,6 @@ public class MainForm : Form
             ColumnCount = 6,
             Padding = new Padding(8),
         };
-
-        void AddRow(string label, Control control, Control? extra = null)
-        {
-            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-            row.Controls.Add(new Label { Text = label, AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(0, 6, 6, 0), Width = 100 });
-            row.Controls.Add(control);
-            if (extra != null) row.Controls.Add(extra);
-            top.Controls.Add(row);
-            top.SetColumnSpan(row, extra != null ? 2 : 1);
-        }
 
         top.Controls.Add(WrapLabelAndControl("Host:", _txtHost));
         top.Controls.Add(WrapLabelAndControl("Benutzer:", _txtUsername));
@@ -96,20 +144,108 @@ public class MainForm : Form
         top.Controls.Add(buttonRow);
         top.SetColumnSpan(buttonRow, 3);
 
+        var namingRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Padding = new Padding(0) };
+        namingRow.Controls.Add(_fileNaming.Group);
+        namingRow.Controls.Add(_folderNaming.Group);
+
+        var namingPanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        namingPanel.Controls.Add(namingRow);
+        namingPanel.Controls.Add(new FlowLayoutPanel { AutoSize = true, WrapContents = false, Padding = new Padding(0, 4, 0, 4), Controls = { _btnSaveNaming } });
+
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 420,
+            SplitterDistance = 380,
         };
         split.Panel1.Controls.Add(_grid);
         split.Panel2.Controls.Add(_log);
 
         Controls.Add(split);
         Controls.Add(_progress);
+        Controls.Add(namingPanel);
         Controls.Add(top);
 
         SetupGridColumns();
+    }
+
+    private void UpdateFilePreview()
+    {
+        var invoice = _invoices.Count > 0 ? _invoices[0] : SampleInvoice;
+        var example = FileNameBuilder.Build(invoice, SampleAttachment, BuildFileNamingOptions());
+        _fileNaming.Preview.Text = $"Vorschau: {example}";
+    }
+
+    private void UpdateFolderPreview()
+    {
+        var invoice = _invoices.Count > 0 ? _invoices[0] : SampleInvoice;
+        var baseOutput = string.IsNullOrWhiteSpace(_txtOutputFolder.Text) ? "<Zielordner>" : _txtOutputFolder.Text;
+        var example = FolderNameBuilder.Build(baseOutput, invoice, BuildFolderNamingOptions());
+        _folderNaming.Preview.Text = $"Vorschau: {example}";
+    }
+
+    private FileNamingOptions BuildFileNamingOptions() => new()
+    {
+        Mode = _fileNaming.IsMode2 ? FileNamingMode.Custom : FileNamingMode.Original,
+        Segments = _fileNaming.BuildSegments(),
+        Separator = _fileNaming.Separator.Text,
+        DateFormat = string.IsNullOrWhiteSpace(_fileNaming.DateFormat.Text) ? "yyyyMMdd" : _fileNaming.DateFormat.Text,
+    };
+
+    private FolderNamingOptions BuildFolderNamingOptions() => new()
+    {
+        Mode = _folderNaming.IsMode2 ? FolderNamingMode.Custom : FolderNamingMode.Flat,
+        Segments = _folderNaming.BuildSegments(),
+        Separator = _folderNaming.Separator.Text,
+        DateFormat = string.IsNullOrWhiteSpace(_folderNaming.DateFormat.Text) ? "yyyyMMdd" : _folderNaming.DateFormat.Text,
+    };
+
+    private void SaveNamingSettingsToAppSettings()
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+            var text = File.Exists(path) ? File.ReadAllText(path) : "{}";
+            var root = JsonNode.Parse(text, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip }) as JsonObject
+                ?? new JsonObject();
+
+            var fileNaming = BuildFileNamingOptions();
+            root["FileNaming"] = SegmentsToJson(fileNaming.Mode.ToString(), fileNaming.Segments, fileNaming.Separator, fileNaming.DateFormat);
+
+            var folderNaming = BuildFolderNamingOptions();
+            root["FolderNaming"] = SegmentsToJson(folderNaming.Mode.ToString(), folderNaming.Segments, folderNaming.Separator, folderNaming.DateFormat);
+
+            var tempPath = path + ".tmp";
+            File.WriteAllText(tempPath, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(tempPath, path, overwrite: true);
+
+            Log("Einstellungen gespeichert.");
+        }
+        catch (Exception ex)
+        {
+            Log($"Fehler beim Speichern der Einstellungen: {ex.Message}");
+        }
+    }
+
+    private static JsonObject SegmentsToJson(string mode, List<NamingSegment> segments, string separator, string dateFormat)
+    {
+        var segmentsArray = new JsonArray();
+        foreach (var segment in segments)
+        {
+            segmentsArray.Add(new JsonObject
+            {
+                ["Type"] = segment.Type.ToString(),
+                ["Value"] = segment.Value,
+            });
+        }
+
+        return new JsonObject
+        {
+            ["Mode"] = mode,
+            ["Segments"] = segmentsArray,
+            ["Separator"] = separator,
+            ["DateFormat"] = dateFormat,
+        };
     }
 
     private static Control WrapLabelAndControl(string label, Control control)
@@ -149,6 +285,12 @@ public class MainForm : Form
             _txtCompanyCode.Text = sap.GetProperty("CompanyCode").GetString() ?? "";
             _txtFiscalYear.Text = sap.GetProperty("FiscalYear").GetString() ?? "";
             _txtOutputFolder.Text = sap.GetProperty("OutputFolder").GetString() ?? "";
+
+            var fileNaming = FileNamingOptionsReader.Read(doc.RootElement);
+            _fileNaming.Apply(fileNaming.Mode == FileNamingMode.Custom, fileNaming.Segments, fileNaming.Separator, fileNaming.DateFormat);
+
+            var folderNaming = FolderNamingOptionsReader.Read(doc.RootElement);
+            _folderNaming.Apply(folderNaming.Mode == FolderNamingMode.Custom, folderNaming.Segments, folderNaming.Separator, folderNaming.DateFormat);
         }
         catch (Exception ex)
         {
@@ -242,6 +384,8 @@ public class MainForm : Form
 
         using var client = new SapODataClient(_options);
         var attachmentService = new AttachmentDownloadService(client, _options);
+        var namingOptions = BuildFileNamingOptions();
+        var folderNamingOptions = BuildFolderNamingOptions();
 
         var downloaded = 0;
         var withoutAttachment = 0;
@@ -262,12 +406,12 @@ public class MainForm : Form
                 else
                 {
                     var savedFiles = new List<string>();
-                    var docFolder = Path.Combine(_options.OutputFolder,
-                        $"{invoice.SupplierInvoice}_{invoice.Supplier}");
+                    var docFolder = FolderNameBuilder.Build(_options.OutputFolder, invoice, folderNamingOptions);
 
                     foreach (var original in originals)
                     {
-                        var savedPath = await attachmentService.DownloadAsync(original, docFolder);
+                        var desiredFileName = FileNameBuilder.Build(invoice, original, namingOptions);
+                        var savedPath = await attachmentService.DownloadAsync(original, docFolder, desiredFileName);
                         savedFiles.Add(Path.GetFileName(savedPath));
                         downloaded++;
                     }
