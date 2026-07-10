@@ -39,7 +39,7 @@ Aktuell konfiguriert auf `RE`, `KR`, `KN` (siehe gemeinsame Analyse: das sind di
 `WE`/`WL` sind Warenbewegungen, `ZP`/`KZ` sind Zahlungen, `KA` ist uneindeutig und wird bewusst nicht automatisch mitgenommen –
 bei Bedarf in `appsettings.json` → `InvoiceDocumentTypes` ergänzen, nachdem ihr stichprobenartig geprüft habt, ob dort echte Rechnungen dranhängen).
 
-## Weg zur zyklischen Automatisierung (deine Frage)
+## Weg zur zyklischen Automatisierung
 
 Das `ConsoleJob`-Projekt ist genau dafür vorbereitet:
 
@@ -52,26 +52,23 @@ Das `ConsoleJob`-Projekt ist genau dafür vorbereitet:
 - Exit-Code `0` bei Erfolg, `1` bei mind. einem Fehler – damit lässt sich der Lauf in der
   Aufgabenplanung sauber überwachen (z. B. "Bei Fehler E-Mail senden" via zusätzlichem Wrapper-Skript).
 
-**Für den produktiven Betrieb würde ich zwei Ausbaustufen empfehlen, in dieser Reihenfolge:**
+**Für den produktiven Betrieb zwei Ausbaustufen, in dieser Reihenfolge:**
 
 1. **Windows-Aufgabenplanung** (schnellster Weg): `SapAttachmentDownloader.ConsoleJob.exe` als
    geplante Aufgabe, z. B. nachts, unter einem Dienstkonto mit gesetzter `SAP_API_PASSWORD`-Variable.
    Kein zusätzlicher Code nötig, das Projekt läuft so wie es ist.
-2. **Windows-Dienst** (falls ihr z. B. mehrmals täglich oder ereignisgesteuert laufen wollt): Der
+2. **Windows-Dienst** (falls mehrmals täglich oder ereignisgesteuert laufen soll): Der
    Core ist UI-frei und lässt sich 1:1 in ein `Microsoft.Extensions.Hosting`-`BackgroundService`-Projekt
    einbetten (`dotnet new worker`) – die drei Services (`InvoiceListService`, `AttachmentDownloadService`,
    `SapODataClient`) bleiben unverändert, nur die Aufruf-Schleife wandert von `Program.cs` in `ExecuteAsync`.
 
-Sag Bescheid, wenn ihr an den Punkt kommt – dann bauen wir daraus entweder die Aufgabenplanung-Config
-oder das Worker-Service-Projekt.
 
 ## Bekannte Vereinfachungen in diesem Skeleton (bewusst, für einen schnellen Start)
 
 - Kennwort wird in der GUI nicht gegen den Windows Credential Manager abgesichert – für Testbetrieb ok,
-  für den produktiven Dienst würde ich das nachziehen (z. B. `CredentialManagement`-NuGet oder DPAPI).
+  für den produktiven Dienst sollte das nachgezogen werden (z. B. `CredentialManagement`-NuGet oder DPAPI).
 - Keine Retry-/Backoff-Logik bei HTTP-Fehlern (z. B. bei kurzzeitigen 503ern des Gateways).
 - `AccountingDocumentType eq 'KA'` ist standardmäßig nicht im Filter – siehe oben.
-- DataGridView statt DevExpress GridControl – lässt sich bei Bedarf 1:1 tauschen.
 - `SupplierName` (Klartext-Lieferantenname) wird aktuell **nicht** befüllt, da `A_SupplierInvoice`
   nur die Business-Partner-Nummer (`InvoicingParty`) liefert, keinen Namen. Ausbauschritt: zusätzlicher
   Aufruf gegen die Business-Partner-API (`API_BUSINESS_PARTNER`) und Anreicherung pro Zeile.
