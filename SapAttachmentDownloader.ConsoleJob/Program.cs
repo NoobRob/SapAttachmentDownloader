@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SapAttachmentDownloader.Core;
+using SapAttachmentDownloader.Core.Models;
 
 // -----------------------------------------------------------------------------------------
 // Konsolen-Job: dieselbe Core-Logik wie die WinForms-App, aber ohne UI - gedacht als Basis
@@ -15,7 +16,10 @@ using SapAttachmentDownloader.Core;
 // -----------------------------------------------------------------------------------------
 
 var basePath = AppContext.BaseDirectory;
-var options = LoadOptions(Path.Combine(basePath, "appsettings.json"));
+var appSettingsPath = Path.Combine(basePath, "appsettings.json");
+var options = LoadOptions(appSettingsPath);
+var namingOptions = LoadFileNamingOptions(appSettingsPath);
+var folderNamingOptions = LoadFolderNamingOptions(appSettingsPath);
 
 options.Password = Environment.GetEnvironmentVariable("SAP_API_PASSWORD")
     ?? throw new InvalidOperationException(
@@ -52,12 +56,12 @@ foreach (var invoice in invoices)
             continue;
         }
 
-        var docFolder = Path.Combine(options.OutputFolder,
-            $"{invoice.SupplierInvoice}_{invoice.Supplier}");
+        var docFolder = FolderNameBuilder.Build(options.OutputFolder, invoice, folderNamingOptions);
 
         foreach (var original in originals)
         {
-            var savedPath = await attachmentService.DownloadAsync(original, docFolder);
+            var desiredFileName = FileNameBuilder.Build(invoice, original, namingOptions);
+            var savedPath = await attachmentService.DownloadAsync(original, docFolder, desiredFileName);
             Console.WriteLine($"  heruntergeladen: {savedPath}");
             newDownloads++;
         }
@@ -96,6 +100,18 @@ static SapApiOptions LoadOptions(string path)
             .EnumerateArray().Select(e => e.GetString() ?? "").ToList(),
         OutputFolder = sap.GetProperty("OutputFolder").GetString() ?? "Downloads",
     };
+}
+
+static FileNamingOptions LoadFileNamingOptions(string path)
+{
+    using var doc = JsonDocument.Parse(File.ReadAllText(path));
+    return FileNamingOptionsReader.Read(doc.RootElement);
+}
+
+static FolderNamingOptions LoadFolderNamingOptions(string path)
+{
+    using var doc = JsonDocument.Parse(File.ReadAllText(path));
+    return FolderNamingOptionsReader.Read(doc.RootElement);
 }
 
 static HashSet<string> LoadState(string path) =>

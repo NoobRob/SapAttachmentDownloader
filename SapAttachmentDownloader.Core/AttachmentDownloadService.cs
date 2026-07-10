@@ -69,9 +69,13 @@ public class AttachmentDownloadService
         MimeType = GetString(item, "MimeType"),
     };
 
-    /// <summary>Laedt den Binaerinhalt eines Anhangs herunter und speichert ihn im Zielordner.</summary>
+    /// <summary>
+    /// Laedt den Binaerinhalt eines Anhangs herunter und speichert ihn im Zielordner unter
+    /// desiredFileName (Namensbildung, z.B. via FileNameBuilder.Build, liegt beim Aufrufer -
+    /// dieser Service kennt nur Download-Mechanik, keine Naming-Strategie).
+    /// </summary>
     public async Task<string> DownloadAsync(
-        AttachmentOriginal original, string destinationFolder, CancellationToken ct = default)
+        AttachmentOriginal original, string destinationFolder, string desiredFileName, CancellationToken ct = default)
     {
         Directory.CreateDirectory(destinationFolder);
 
@@ -89,10 +93,7 @@ public class AttachmentDownloadService
 
         var bytes = await _client.GetBytesAsync(relativePath, ct);
 
-        var fileName = string.IsNullOrWhiteSpace(original.FileName)
-            ? $"{original.LinkedSAPObjectKey}_{original.ArchiveDocumentID}"
-            : original.FileName;
-        fileName = SanitizeFileName(fileName);
+        var fileName = SanitizeFileName(desiredFileName);
 
         var fullPath = Path.Combine(destinationFolder, fileName);
         fullPath = MakeUnique(fullPath);
