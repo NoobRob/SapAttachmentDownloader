@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SapAttachmentDownloader.WinForms</RootNamespace>
+    <ApplicationIcon />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SapAttachmentDownloader.Core\SapAttachmentDownloader.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Hinweis: Ihr nutzt DevExpress 24.2 / .NET 8 in euren anderen WinForms-Projekten.
+    Diese GUI verwendet bewusst nur Standard-WinForms-Controls (kein NuGet-Restore noetig,
+    keine Lizenzabhaengigkeit). DataGridView laesst sich 1:1 durch dx.GridControl ersetzen,
+    falls ihr es lieber in eurem gewohnten DevExpress-Look haben wollt.
+  -->
+
+</Project>
