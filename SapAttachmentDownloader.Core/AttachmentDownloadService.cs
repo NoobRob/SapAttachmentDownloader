@@ -1,5 +1,6 @@
-using System.Text.Json;
 using SapAttachmentDownloader.Core.Models;
+using System.Text.Json;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace SapAttachmentDownloader.Core;
 
@@ -70,9 +71,16 @@ public class AttachmentDownloadService
     };
 
     /// <summary>
-    /// Laedt den Binaerinhalt eines Anhangs herunter und speichert ihn im Zielordner unter
-    /// desiredFileName (Namensbildung, z.B. via FileNameBuilder.Build, liegt beim Aufrufer -
-    /// dieser Service kennt nur Download-Mechanik, keine Naming-Strategie).
+    /// Lädt den Binaerinhalt eines Anhangs herunter und speichert ihn im Zielordner unter
+    /// desiredFileName (Namensbildung, z.B. via FileNameBuilder.Build, liegt beim Aufrufer - dieser Service kennt nur Download-Mechanik, keine Naming-Strategie).
+    /// 
+    /// var relativePath = $"{ServicePath}/AttachmentContentSet({keyPredicate})/$value":
+    /// $value ist ein fester Bestandteil des OData-Protokolls. Es bedeutet: "gib mir nicht die Beschreibung/Metadaten des Datensatzes, sondern den rohen Inhalt dahinter."
+    /// 
+    /// AttachmentContentSet ist eine sogenannte Media-Entity – ein Datensatz, der nur als Container für eine Binärdatei (das PDF) dient.
+    /// Ruft man normal AttachmentContentSet(...) auf, bekommt man von SAP eine JSON/XML-Antwort mit Eigenschaften des Datensatzes zurück (also Metadaten – "Dateigröße: X, Typ: Y" statt der Datei selbst).
+    
+    /// Hängt man /$value an, sagt man SAP stattdessen: "Ich will nicht die /Beschreibung, ich will den eigentlichen Inhalt – also die rohen Bytes der PDF-Datei direkt als Antwort."
     /// </summary>
     public async Task<string> DownloadAsync(
         AttachmentOriginal original, string destinationFolder, string desiredFileName, CancellationToken ct = default)

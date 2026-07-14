@@ -96,7 +96,7 @@ public class MainForm : Form
 
         // Default fuer die Ordnerbenennung reproduziert das bisherige, fest verdrahtete
         // Verhalten (Unterordner "Rechnungsnummer_Lieferant-Nr."), damit ohne appsettings.json
-        // oder ohne "FolderNaming"-Sektion nichts anders funktioniert als zuvor.
+        // oder ohne "FolderNaming"- Sektionnichts anders funktioniert als zuvor.
         var folderDefaults = new FolderNamingOptions();
         _folderNaming.Apply(folderDefaults.Mode == FolderNamingMode.Custom, folderDefaults.Segments, folderDefaults.Separator, folderDefaults.DateFormat);
 
@@ -373,7 +373,7 @@ public class MainForm : Form
         if (_invoices.Count == 0) return;
 
         if (!TryBuildOptions(out var freshOptions)) return;
-        // Kennwort neu uebernehmen (falls es zwischenzeitlich geaendert wurde), Rest bleibt wie geladen.
+        // Kennwort neu übernehmen (falls es zwischenzeitlich geaendert wurde), Rest bleibt.
         _options.Password = freshOptions.Password;
         _options.OutputFolder = freshOptions.OutputFolder;
 
